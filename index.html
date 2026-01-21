@@ -104,7 +104,7 @@
                 rowData[FIELD_TIME] = now; 
 
                 // 3. 寫入資料表
-                const tableResponse = await fetch(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}/?user_field_names=true`, {
+                const tableResponse = await fetch(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Token ${BASEROW_TOKEN}`,
