@@ -1,24 +1,40 @@
-name: Deploy to GitHub Pages with Secrets
+name: Deploy
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main"] # 當你推送到 main 時觸發
+
+# 必須設定權限，Action 才能發布網頁內容
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Inject Secrets into index.html
+      - name: Inject Secrets
         run: |
-          # 使用 sed 指令將 HTML 裡的佔位符替換成真正的 Secret
+          # 將 HTML 中的佔位符替換為真正的 Secrets
           sed -i "s/{{BASEROW_TOKEN}}/${{ secrets.BASEROW_TOKEN }}/g" index.html
           sed -i "s/{{BASEROW_TABLE_ID}}/${{ secrets.BASEROW_TABLE_ID }}/g" index.html
 
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          folder: . # 要發布的資料夾
-          branch: gh-pages # 發布到這個分支
+          path: '.' # 上傳當前目錄（包含改好的 index.html）
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
