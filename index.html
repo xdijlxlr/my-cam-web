@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BoxCam - 上傳至 Baserow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex flex-col items-center p-6">
+
+    <header class="mb-10 text-center">
+        <h1 class="text-3xl font-bold text-blue-400"><i class="fas fa-box-open mr-2"></i>BoxCam 存證系統</h1>
+        <p class="text-gray-400 mt-2">拍攝照片後自動存入資料庫</p>
+    </header>
+
+    <div class="w-full max-w-md bg-slate-900 rounded-3xl p-8 shadow-2xl border border-slate-800">
+        <label class="cursor-pointer group">
+            <div id="dropzone" class="border-2 border-dashed border-slate-700 group-hover:border-blue-500 rounded-2xl p-10 text-center transition">
+                <i class="fas fa-camera text-5xl text-slate-600 group-hover:text-blue-500 mb-4"></i>
+                <p class="text-lg font-medium">點擊拍照或上傳</p>
+                <input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden">
+            </div>
+        </label>
+
+        <div id="previewContainer" class="mt-6 hidden">
+            <img id="imagePreview" class="w-full h-48 object-cover rounded-xl mb-4 border border-slate-700">
+            <div id="statusText" class="text-sm text-center mb-4"></div>
+            <button id="uploadBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition flex justify-center items-center">
+                <i class="fas fa-cloud-upload-alt mr-2"></i> 確認上傳至 Baserow
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 請在此處填寫你的 Baserow 資訊 ---
+        const BASEROW_TOKEN = '你的_API_TOKEN';
+        const TABLE_ID = '你的_TABLE_ID'; 
+        const FILE_FIELD_NAME = '圖片欄位名稱'; // 例如：'Image' 或 'field_123'
+        // ----------------------------------
+
+        const fileInput = document.getElementById('fileInput');
+        const previewContainer = document.getElementById('previewContainer');
+        const imagePreview = document.getElementById('imagePreview');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const statusText = document.getElementById('statusText');
+
+        let selectedFile = null;
+
+        // 當使用者選擇檔案後
+        fileInput.addEventListener('change', (e) => {
+            selectedFile = e.target.files[0];
+            if (selectedFile) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    imagePreview.src = event.target.result;
+                    previewContainer.classList.remove('hidden');
+                    statusText.innerText = `準備上傳: ${selectedFile.name}`;
+                    statusText.className = "text-sm text-center mb-4 text-blue-400";
+                };
+                reader.readAsDataURL(selectedFile);
+            }
+        });
+
+        // 執行上傳
+        uploadBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            uploadBtn.disabled = true;
+            uploadBtn.innerText = "上傳中...";
+            statusText.innerText = "正在處理檔案並傳送至 Baserow...";
+
+            try {
+                // 1. 先將檔案上傳至 Baserow 的使用者檔案庫
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+
+                const fileResponse = await fetch('https://api.baserow.io/api/user-files/upload-file/', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Token ${BASEROW_TOKEN}` },
+                    body: formData
+                });
+
+                const fileData = await fileResponse.json();
+
+                if (fileResponse.ok) {
+                    // 2. 將檔案資訊寫入 Table 的 Row
+                    const rowData = {};
+                    rowData[FILE_FIELD_NAME] = [{ "name": fileData.name }];
+                    // 如果有其他欄位（如單號），可以在此加入
+
+                    const tableResponse = await fetch(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}/?user_field_names=true`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Token ${BASEROW_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(rowData)
+                    });
+
+                    if (tableResponse.ok) {
+                        statusText.innerText = "✅ 上傳成功！已存入 Baserow";
+                        statusText.classList.replace('text-blue-400', 'text-green-400');
+                        uploadBtn.innerText = "完成上傳";
+                    } else {
+                        throw new Error('寫入資料列失敗');
+                    }
+                } else {
+                    throw new Error('檔案上傳伺服器失敗');
+                }
+            } catch (error) {
+                console.error(error);
+                statusText.innerText = "❌ 上傳失敗：" + error.message;
+                statusText.classList.replace('text-blue-400', 'text-red-400');
+                uploadBtn.disabled = false;
+                uploadBtn.innerText = "重試上傳";
+            }
+        });
+    </script>
+</body>
+</html>
