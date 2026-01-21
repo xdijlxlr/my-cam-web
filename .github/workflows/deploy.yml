@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: ["main"] # 當你推送到 main 時觸發
+    branches: ["gh-pages"] # 當你推送到 main 時觸發
 
 # 必須設定權限，Action 才能發布網頁內容
 permissions:
