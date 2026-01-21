@@ -104,7 +104,7 @@
                 rowData[FIELD_TIME] = now; 
 
                 // 3. 寫入資料表
-                const tableResponse = await fetch(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}`, {
+                const tableResponse = await fetch(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}/?user_field_names=true`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Token ${BASEROW_TOKEN}`,
@@ -120,6 +120,8 @@
                     // 清除欄位
                     orderIdInput.value = "";
                 } else {
+                    const errorDetail = await tableResponse.json();
+                    console.log("Baserow 錯誤詳情:", errorDetail);
                     throw new Error('資料寫入失敗');
                 }
             } catch (error) {
