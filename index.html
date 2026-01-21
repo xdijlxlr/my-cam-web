@@ -101,7 +101,6 @@
                 const rowData = {};
                 rowData[FIELD_ORDER_ID] = orderId;
                 rowData[FIELD_PHOTO] = [{ "name": fileData.name }];
-                rowData[FIELD_TIME] = now; 
 
                 // 3. 寫入資料表
                 const tableResponse = await fetch(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}/?user_field_names=true`, {
