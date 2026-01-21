@@ -3,133 +3,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>訂單存證上傳</title>
+    <title>BoxCam 訂單管理系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-<body class="bg-slate-950 text-white min-h-screen flex flex-col items-center p-6">
+<body class="bg-slate-950 text-white min-h-screen p-4">
 
-    <header class="mb-8 text-center">
-        <h1 class="text-3xl font-bold text-blue-400"><i class="fas fa-box-open mr-2"></i>存證系統</h1>
+    <header class="mb-6 text-center">
+        <h1 class="text-3xl font-bold text-blue-400"><i class="fas fa-database mr-2"></i>BoxCam 管理後台</h1>
     </header>
 
-    <div class="w-full max-w-md bg-slate-900 rounded-3xl p-8 shadow-2xl border border-slate-800">
+    <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-6">
         
-        <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-400 mb-2">訂單編號</label>
-            <input type="text" id="orderId" placeholder="請輸入或貼上單號" 
-                   class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition">
+        <div class="bg-slate-900 rounded-2xl p-6 border border-slate-800 h-fit sticky top-4">
+            <h2 id="formTitle" class="text-xl font-bold mb-4 text-blue-300">新增紀錄</h2>
+            <input type="hidden" id="editingRowId"> <div class="mb-4">
+                <label class="block text-sm text-gray-400 mb-1">訂單編號</label>
+                <input type="text" id="orderId" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:border-blue-500 outline-none">
+            </div>
+
+            <label class="cursor-pointer block mb-4">
+                <div class="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:border-blue-500">
+                    <i class="fas fa-camera text-2xl text-slate-500 mb-2"></i>
+                    <p class="text-sm">更新照片 (選填)</p>
+                    <input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden">
+                </div>
+            </label>
+
+            <div id="previewArea" class="hidden mb-4">
+                <img id="imagePreview" class="w-full h-32 object-cover rounded-lg border border-slate-700">
+            </div>
+
+            <div class="flex gap-2">
+                <button id="saveBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-bold transition">確認儲存</button>
+                <button id="cancelBtn" class="hidden flex-1 bg-slate-700 hover:bg-slate-600 py-2 rounded-lg font-bold transition">取消編輯</button>
+            </div>
+            <div id="statusText" class="mt-3 text-xs text-center"></div>
         </div>
 
-        <label class="cursor-pointer group block mb-6">
-            <div id="dropzone" class="border-2 border-dashed border-slate-700 group-hover:border-blue-500 rounded-2xl p-8 text-center transition">
-                <i class="fas fa-camera text-4xl text-slate-600 group-hover:text-blue-500 mb-3"></i>
-                <p class="text-md font-medium">點擊拍照存證</p>
-                <input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden">
+        <div class="bg-slate-900 rounded-2xl p-6 border border-slate-800">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-blue-300">歷史紀錄</h2>
+                <button onclick="fetchRows()" class="text-slate-400 hover:text-white"><i class="fas fa-sync-alt"></i></button>
             </div>
-        </label>
+            
+            <input type="text" id="searchInput" placeholder="搜尋訂單編號..." 
+                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 mb-4 text-sm outline-none focus:border-blue-500">
 
-        <div id="previewContainer" class="hidden">
-            <img id="imagePreview" class="w-full h-40 object-cover rounded-xl mb-4 border border-slate-700">
-            <div id="statusText" class="text-sm text-center mb-4"></div>
-            <button id="uploadBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition flex justify-center items-center">
-                確認上傳紀錄
-            </button>
+            <div id="recordList" class="space-y-3">
+                <p class="text-slate-500 text-center py-10">讀取中...</p>
+            </div>
         </div>
     </div>
 
     <script>
-        // --- GitHub Actions 會自動替換這些值 ---
         const BASEROW_TOKEN = '{{BASEROW_TOKEN}}';
         const TABLE_ID = '{{BASEROW_TABLE_ID}}';
-        
-        // --- 請根據你的 Baserow 欄位代號修改 ---
-        const FIELD_ORDER_ID = 'orderID'; // 訂單編號欄位
-        const FIELD_PHOTO = 'photo';    // 照片檔案欄位
-        const FIELD_TIME = 'time';     // 時間欄位 (若使用 Created on 類型則可忽略此欄)
-        // ------------------------------------
+        const FIELD_ORDER_ID = 'orderID'; 
+        const FIELD_PHOTO = 'photo';
+        const FIELD_TIME = 'time';
 
-        const fileInput = document.getElementById('fileInput');
-        const previewContainer = document.getElementById('previewContainer');
-        const imagePreview = document.getElementById('imagePreview');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const statusText = document.getElementById('statusText');
+        const recordList = document.getElementById('recordList');
+        const saveBtn = document.getElementById('saveBtn');
         const orderIdInput = document.getElementById('orderId');
+        const fileInput = document.getElementById('fileInput');
+        const editingRowId = document.getElementById('editingRowId');
+        const formTitle = document.getElementById('formTitle');
+        const cancelBtn = document.getElementById('cancelBtn');
 
-        let selectedFile = null;
-
-        fileInput.addEventListener('change', (e) => {
-            selectedFile = e.target.files[0];
-            if (selectedFile) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    imagePreview.src = event.target.result;
-                    previewContainer.classList.remove('hidden');
-                    statusText.innerText = "檔案已就緒";
-                    statusText.className = "text-sm text-center mb-4 text-blue-400";
-                };
-                reader.readAsDataURL(selectedFile);
+        // --- 1. 查詢 (Read) ---
+        async function fetchRows() {
+            try {
+                const response = await fetch(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}/?user_field_names=true`, {
+                    headers: { 'Authorization': `Token ${BASEROW_TOKEN}` }
+                });
+                const data = await response.json();
+                renderList(data.results);
+            } catch (err) {
+                recordList.innerHTML = `<p class="text-red-500 text-center">載入失敗</p>`;
             }
-        });
+        }
 
-        uploadBtn.addEventListener('click', async () => {
-            if (!selectedFile) return alert('請先拍照！');
-            
+        function renderList(rows) {
+            recordList.innerHTML = '';
+            rows.forEach(row => {
+                const photoUrl = row[FIELD_PHOTO]?.[0]?.url || 'https://via.placeholder.com/150';
+                const div = document.createElement('div');
+                div.className = "bg-slate-800 p-3 rounded-xl flex items-center gap-3 border border-slate-700 hover:border-slate-500 transition cursor-pointer";
+                div.innerHTML = `
+                    <img src="${photoUrl}" class="w-12 h-12 rounded object-cover">
+                    <div class="flex-grow min-w-0">
+                        <div class="font-bold truncate text-sm">${row[FIELD_ORDER_ID]}</div>
+                        <div class="text-[10px] text-slate-500">${row[FIELD_TIME] || ''}</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="editMode('${row.id}', '${row[FIELD_ORDER_ID]}')" class="p-2 text-blue-400 hover:bg-slate-700 rounded"><i class="fas fa-edit"></i></button>
+                        <button onclick="deleteRow(${row.id})" class="p-2 text-red-400 hover:bg-slate-700 rounded"><i class="fas fa-trash"></i></button>
+                    </div>
+                `;
+                recordList.appendChild(div);
+            });
+        }
+
+        // --- 2. 新增與修改 (Create & Update) ---
+        saveBtn.addEventListener('click', async () => {
             const orderId = orderIdInput.value.trim();
-            if (!orderId) return alert('請輸入訂單編號！');
+            const isEditing = editingRowId.value !== "";
+            if (!orderId) return alert('請輸入編號');
 
-            uploadBtn.disabled = true;
-            uploadBtn.innerText = "上傳中...";
-            statusText.innerText = "正在傳送至 Baserow...";
+            saveBtn.disabled = true;
+            saveBtn.innerText = "處理中...";
 
             try {
-                // 1. 上傳檔案
-                const formData = new FormData();
-                formData.append('file', selectedFile);
-
-                const fileResponse = await fetch('https://api.baserow.io/api/user-files/upload-file/', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Token ${BASEROW_TOKEN}` },
-                    body: formData
-                });
-                const fileData = await fileResponse.json();
-
-                if (!fileResponse.ok) throw new Error('檔案上傳失敗');
-
-                // 2. 準備 Row 資料 (包含單號與目前時間)
-                const now = new Date().toISOString(); // 取得 ISO 格式時間
-                const rowData = {};
+                let rowData = {};
                 rowData[FIELD_ORDER_ID] = orderId;
-                rowData[FIELD_PHOTO] = [{ "name": fileData.name }];
 
-                // 3. 寫入資料表
-                const tableResponse = await fetch(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}/?user_field_names=true`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Token ${BASEROW_TOKEN}`,
-                        'Content-Type': 'application/json'
-                    },
+                // 如果有選新照片，先上傳照片
+                if (fileInput.files.length > 0) {
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    const fRes = await fetch('https://api.baserow.io/api/user-files/upload-file/', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Token ${BASEROW_TOKEN}` },
+                        body: formData
+                    });
+                    const fData = await fRes.json();
+                    rowData[FIELD_PHOTO] = [{ "name": fData.name }];
+                }
+
+                const url = isEditing 
+                    ? `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/${editingRowId.value}/?user_field_names=true`
+                    : `https://api.baserow.io/api/database/rows/table/${TABLE_ID}/?user_field_names=true`;
+
+                const response = await fetch(url, {
+                    method: isEditing ? 'PATCH' : 'POST',
+                    headers: { 'Authorization': `Token ${BASEROW_TOKEN}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify(rowData)
                 });
 
-                if (tableResponse.ok) {
-                    statusText.innerText = "✅ 儲存成功！";
-                    statusText.classList.replace('text-blue-400', 'text-green-400');
-                    uploadBtn.innerText = "完成";
-                    // 清除欄位
-                    orderIdInput.value = "";
-                } else {
-                    const errorDetail = await tableResponse.json();
-                    console.log("Baserow 錯誤詳情:", errorDetail);
-                    throw new Error('資料寫入失敗');
+                if (response.ok) {
+                    resetForm();
+                    fetchRows();
+                    alert(isEditing ? '更新成功' : '新增成功');
                 }
-            } catch (error) {
-                statusText.innerText = "❌ 錯誤：" + error.message;
-                statusText.classList.replace('text-blue-400', 'text-red-400');
-                uploadBtn.disabled = false;
-                uploadBtn.innerText = "重試";
+            } catch (err) {
+                alert('操作失敗');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerText = "確認儲存";
             }
         });
+
+        // --- 3. 刪除 (Delete) ---
+        async function deleteRow(id) {
+            if (!confirm('確定要刪除這筆紀錄嗎？')) return;
+            try {
+                await fetch(`https://api.baserow.io/api/database/rows/table/${TABLE_ID}/${id}/`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Token ${BASEROW_TOKEN}` }
+                });
+                fetchRows();
+            } catch (err) { alert('刪除失敗'); }
+        }
+
+        // 編輯模式轉換
+        function editMode(id, orderId) {
+            editingRowId.value = id;
+            orderIdInput.value = orderId;
+            formTitle.innerText = "修改紀錄 #" + id;
+            cancelBtn.classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function resetForm() {
+            editingRowId.value = "";
+            orderIdInput.value = "";
+            fileInput.value = "";
+            formTitle.innerText = "新增紀錄";
+            cancelBtn.classList.add('hidden');
+            document.getElementById('previewArea').classList.add('hidden');
+        }
+
+        cancelBtn.addEventListener('click', resetForm);
+
+        // 搜尋功能
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const items = recordList.querySelectorAll('div.bg-slate-800');
+            items.forEach(item => {
+                const text = item.querySelector('.font-bold').innerText.toLowerCase();
+                item.style.display = text.includes(term) ? 'flex' : 'none';
+            });
+        });
+
+        // 預覽圖片
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    document.getElementById('imagePreview').src = ev.target.result;
+                    document.getElementById('previewArea').classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 初始化
+        fetchRows();
     </script>
 </body>
 </html>
